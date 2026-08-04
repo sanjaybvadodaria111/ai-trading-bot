@@ -2,8 +2,6 @@ import os
 import time
 import requests
 import numpy as np
-import pandas as pd
-from xgboost import XGBClassifier
 from flask import Flask
 from threading import Thread
 
@@ -17,7 +15,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "⚡ AI Trading Bot is Alive and Running 24/7 on Render!"
+    return "⚡ Ultimate Omni-AI Trading Bot is Active & Running 24/7!"
 
 def send_ultimate_supreme_telegram_alert(
     symbol, strike, action, entry, sl, t1, t2, win_prob, pcr, 
@@ -54,7 +52,7 @@ def send_ultimate_supreme_telegram_alert(
         "parse_mode": "Markdown"
     }
     try:
-        res = requests.post(url, json=payload)
+        res = requests.post(url, json=payload, timeout=10)
         print("Telegram Dispatch Status:", res.status_code)
     except Exception as e:
         print(f"Telegram Dispatch Error: {e}")
@@ -79,7 +77,7 @@ class OrderFlowEngine:
         return "AGGRESSIVE_INSTITUTIONAL_BUYING"
 
 # =====================================================================
-# 3. QUANTUM, TOPOLOGY & ADVANCED AI MODULES
+# 3. ADVANCED QUANTUM, TOPOLOGY & AI MODULES
 # =====================================================================
 
 class TopologicalDataEngine:
@@ -190,15 +188,15 @@ class UltimateMasterOmniAIEngine:
                 dna_version=f"v{np.random.randint(100, 999)}.0-SMC-Genetic"
             )
 
-def run_trading_bot():
+def run_background_trading_loop():
+    # 10 सेकंड डिले ताकि Flask सर्वर पहले बाइंड हो जाए
+    time.sleep(10)
     bot = UltimateMasterOmniAIEngine()
-    print("AI Trading Bot Active! Triggering First Signal...")
-    time.sleep(5)  # सर्वर बूट होने का इंतज़ार
     
-    # पहला सिग्नल तुरंत भेजा जाएगा
+    # पहला लाइव सिग्नल भेजेगा
     bot.process_live_market_tick("NIFTY 50", ["24500 CE", "24550 CE"])
     
-    # इसके बाद 24/7 बैकग्राउंड चेकिंग लूप
+    # इसके बाद 24/7 बैकग्राउंड लूप
     while True:
         time.sleep(300)
         bot.process_live_market_tick("NIFTY 50", ["24500 CE", "24550 CE"])
@@ -207,7 +205,7 @@ def run_trading_bot():
 # 5. SERVER ENTRYPOINT FOR RENDER
 # =====================================================================
 if __name__ == "__main__":
-    t = Thread(target=run_trading_bot)
+    t = Thread(target=run_background_trading_loop)
     t.daemon = True
     t.start()
     
