@@ -5,9 +5,6 @@ import numpy as np
 from flask import Flask
 from threading import Thread
 
-# =====================================================================
-# 1. TELEGRAM CONFIGURATION
-# =====================================================================
 TELEGRAM_BOT_TOKEN = "7704508399:AAEOv0Jw8eMu011m2W7ct7jwqiL4HGHZqk"
 TELEGRAM_CHAT_ID = "8144219296"
 
@@ -15,7 +12,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "⚡ Ultimate Omni-AI Trading Bot is Active & Running 24/7!"
+    return "AI Trading Bot is Online and Running 24/7!"
 
 def send_ultimate_supreme_telegram_alert(
     symbol, strike, action, entry, sl, t1, t2, win_prob, pcr, 
@@ -25,41 +22,37 @@ def send_ultimate_supreme_telegram_alert(
     emoji = "⚡🟢" if "CE" in action else "⚡🔴"
     
     msg = (
-        f"{emoji} **ULTIMATE OMNI-AI QUANTUM & SMC SIGNAL** {emoji}\n\n"
-        f"📌 **Symbol:** {symbol}\n"
-        f"🎯 **Target Strike:** {strike}\n"
-        f"⚡ **Action:** {action}\n\n"
-        f"💵 **Optimal Entry:** ₹{entry}\n"
-        f"🛑 **Genetic SL:** ₹{sl}\n"
-        f"🎯 **Target 1:** ₹{t1} | **Target 2:** ₹{t2}\n\n"
-        f"📊 **Smart Money & Institutional Analytics:**\n"
-        f"├ **PCR Ratio:** {pcr:.2f}\n"
-        f"├ **Liquidity Event:** {sweep_status}\n"
-        f"├ **Imbalance / FVG:** {fvg_status}\n"
-        f"├ **Order Flow (CVD):** {cvd_status}\n"
-        f"├ **AI Win Probability:** {win_prob * 100:.1f}%\n"
-        f"├ **AI Swarm Consensus:** {swarm_votes}/100 Agents Approved\n"
-        f"├ **3D Macro Topology:** {tda_shape}\n"
-        f"└ **Quantum Entanglement Score:** {q_score:.4f}\n\n"
-        f"🧬 **Evolved DNA Version:** {dna_version}\n"
-        f"🧠 **Neuromorphic Spike:** FIRED (Sub-millisecond Latency)\n"
+        f"{emoji} <b>ULTIMATE OMNI-AI QUANTUM & SMC SIGNAL</b> {emoji}\n\n"
+        f"📌 <b>Symbol:</b> {symbol}\n"
+        f"🎯 <b>Target Strike:</b> {strike}\n"
+        f"⚡ <b>Action:</b> {action}\n\n"
+        f"💵 <b>Optimal Entry:</b> ₹{entry}\n"
+        f"🛑 <b>Genetic SL:</b> ₹{sl}\n"
+        f"🎯 <b>Target 1:</b> ₹{t1} | <b>Target 2:</b> ₹{t2}\n\n"
+        f"📊 <b>Smart Money & Institutional Analytics:</b>\n"
+        f"├ <b>PCR Ratio:</b> {pcr:.2f}\n"
+        f"├ <b>Liquidity Event:</b> {sweep_status}\n"
+        f"├ <b>Imbalance / FVG:</b> {fvg_status}\n"
+        f"├ <b>Order Flow (CVD):</b> {cvd_status}\n"
+        f"├ <b>AI Win Probability:</b> {win_prob * 100:.1f}%\n"
+        f"├ <b>AI Swarm Consensus:</b> {swarm_votes}/100 Agents Approved\n"
+        f"├ <b>3D Macro Topology:</b> {tda_shape}\n"
+        f"└ <b>Quantum Entanglement Score:</b> {q_score:.4f}\n\n"
+        f"🧬 <b>Evolved DNA Version:</b> {dna_version}\n"
+        f"🧠 <b>Neuromorphic Spike:</b> FIRED (Sub-millisecond Latency)\n"
         f"⏰ {time.strftime('%Y-%m-%d %H:%M:%S')}"
     )
     
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": msg,
-        "parse_mode": "Markdown"
+        "parse_mode": "HTML"
     }
     try:
         res = requests.post(url, json=payload, timeout=10)
-        print("Telegram Dispatch Status:", res.status_code)
+        print("Telegram Dispatch Status:", res.status_code, res.text)
     except Exception as e:
         print(f"Telegram Dispatch Error: {e}")
-
-# =====================================================================
-# 2. SMART MONEY CONCEPTS (SMC) ENGINES
-# =====================================================================
 
 class LiquiditySweepEngine:
     @staticmethod
@@ -75,10 +68,6 @@ class OrderFlowEngine:
     @staticmethod
     def analyze_order_flow():
         return "AGGRESSIVE_INSTITUTIONAL_BUYING"
-
-# =====================================================================
-# 3. ADVANCED QUANTUM, TOPOLOGY & AI MODULES
-# =====================================================================
 
 class TopologicalDataEngine:
     @staticmethod
@@ -96,8 +85,7 @@ class QuantumOptimizerEngine:
     def simulate_quantum_entanglement(features):
         pcr, delta, iv, cvd = features
         q_state = np.array([np.cos(pcr * np.pi), np.sin(delta * np.pi), np.cos(iv * np.pi), np.sin(cvd * np.pi)])
-        q_score = float(np.dot(q_state, q_state.T))
-        return q_score
+        return float(np.dot(q_state, q_state.T))
 
 class AISwarmConsensus:
     def __init__(self, num_agents=100):
@@ -121,12 +109,7 @@ class GeneticAlgorithmMutator:
     def evolve_dna_parameters(self, historical_fitness):
         best_agent_idx = int(np.argmax(historical_fitness))
         best_dna = self.dna[best_agent_idx]
-        mutation_noise = np.random.normal(0, 0.02, size=4)
-        return best_dna + mutation_noise
-
-# =====================================================================
-# 4. MASTER BOT ENGINE EXECUTION
-# =====================================================================
+        return best_dna + np.random.normal(0, 0.02, size=4)
 
 class UltimateMasterOmniAIEngine:
     def __init__(self):
@@ -189,21 +172,13 @@ class UltimateMasterOmniAIEngine:
             )
 
 def run_background_trading_loop():
-    # 10 सेकंड डिले ताकि Flask सर्वर पहले बाइंड हो जाए
     time.sleep(10)
     bot = UltimateMasterOmniAIEngine()
-    
-    # पहला लाइव सिग्नल भेजेगा
     bot.process_live_market_tick("NIFTY 50", ["24500 CE", "24550 CE"])
-    
-    # इसके बाद 24/7 बैकग्राउंड लूप
     while True:
         time.sleep(300)
         bot.process_live_market_tick("NIFTY 50", ["24500 CE", "24550 CE"])
 
-# =====================================================================
-# 5. SERVER ENTRYPOINT FOR RENDER
-# =====================================================================
 if __name__ == "__main__":
     t = Thread(target=run_background_trading_loop)
     t.daemon = True
