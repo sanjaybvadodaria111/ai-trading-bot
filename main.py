@@ -5,7 +5,7 @@ import numpy as np
 from flask import Flask
 from threading import Thread
 
-TELEGRAM_BOT_TOKEN = "7704508399:AAEOv0Jw8eMu011m2W7ct7jwqiL4HGHZqk"
+TELEGRAM_BOT_TOKEN = "7704508399:AAEOv0Jw8eMu011m2W7ct7jw9qiL4HGHZqk"
 TELEGRAM_CHAT_ID = "8144219296"
 
 app = Flask(__name__)
