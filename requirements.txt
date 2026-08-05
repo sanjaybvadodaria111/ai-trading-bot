@@ -1,6 +1,8 @@
+flask
 requests
 numpy
-pandas
-xgboost
-flask
+matplotlib
+scipy
+scikit-learn
+pytz
 gunicorn
