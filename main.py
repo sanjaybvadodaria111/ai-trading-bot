@@ -18,7 +18,7 @@ from threading import Thread
 # =====================================================================
 # 1. ENTERPRISE CONFIGURATION
 # =====================================================================
-TELEGRAM_BOT_TOKEN = "7704508399:AAEOv0Jw8eMu011m2W7ct7jwqiL4HGHZqk"
+TELEGRAM_BOT_TOKEN = "7704508399:AAFj1z41EdZ0IYV9uZJuARjgLnwyvYor2bY"
 TELEGRAM_CHAT_ID = "8144219296"
 
 IS_BOT_ACTIVE = True
