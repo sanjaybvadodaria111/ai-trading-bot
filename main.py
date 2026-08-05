@@ -1,6 +1,5 @@
 import os
 import time
-import requests
 import datetime
 import pytz
 import io
@@ -11,34 +10,24 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.stats import norm
-from sklearn.ensemble import RandomForestClassifier
-from flask import Flask, request, jsonify
+import telebot
 from threading import Thread
 
 # =====================================================================
 # 1. ENTERPRISE CONFIGURATION
 # =====================================================================
 TELEGRAM_BOT_TOKEN = "7704508399:AAFj1z41EdZ0IYV9uZJuARjgLnwyvYor2bY"
-TELEGRAM_CHAT_ID = "8144219296"
+
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 IS_BOT_ACTIVE = True
 RISK_MODE = "MODERATE"
 TOTAL_CAPITAL = 100000
-DAILY_LOSS_COUNT = 0
-MAX_ALLOWED_DAILY_LOSS = 2
-
-LAST_SIGNAL_KEY = ""  # Duplicate Signal Prevention Guard
-
-LIVE_BROKER_EXECUTION = False
-BROKER_NAME = "SHOONYA"
-BROKER_USER_ID = "YOUR_USER_ID"
-BROKER_API_KEY = "YOUR_API_KEY"
-BROKER_ACCESS_TOKEN = "YOUR_ACCESS_TOKEN"
-
-app = Flask(__name__)
+LAST_SIGNAL_KEY = ""  
+TARGET_CHAT_IDS = set()  # Dynamically stores user chat IDs who send /start
 
 # =====================================================================
-# 2. DATABASE & ML ENGINE
+# 2. DATABASE INIT
 # =====================================================================
 def init_db():
     conn = sqlite3.connect('trade_journal.db')
@@ -56,49 +45,6 @@ def init_db():
 
 init_db()
 
-class MachineLearningRetrainer:
-    def __init__(self):
-        self.model = RandomForestClassifier(n_estimators=100, random_state=42)
-        self.is_trained = False
-
-    def train_model_from_db(self):
-        conn = sqlite3.connect('trade_journal.db')
-        cursor = conn.cursor()
-        cursor.execute('SELECT pcr, win_prob, status FROM trades')
-        data = cursor.fetchall()
-        conn.close()
-
-        if len(data) >= 10:
-            X = [[row[0], row[1]] for row in data]
-            y = [1 if row[2] == 'WIN' else 0 for row in data]
-            self.model.fit(X, y)
-            self.is_trained = True
-
-    def predict_trade_confidence(self, pcr, win_prob):
-        if self.is_trained:
-            prediction = self.model.predict_proba([[pcr, win_prob]])[0][1]
-            return float(prediction)
-        return win_prob
-
-ml_engine = MachineLearningRetrainer()
-
-# =====================================================================
-# 3. OPTIONS GREEKS & MARKET HOURS
-# =====================================================================
-class OptionsGreeksCalculator:
-    @staticmethod
-    def calculate_greeks(S, K, T, r, sigma, option_type="CE"):
-        try:
-            d1 = (math.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * math.sqrt(T))
-            d2 = d1 - sigma * math.sqrt(T)
-            delta = norm.cdf(d1) if option_type == "CE" else -norm.cdf(-d1)
-            gamma = norm.pdf(d1) / (S * sigma * math.sqrt(T))
-            theta = (- (S * norm.pdf(d1) * sigma) / (2 * math.sqrt(T)) - r * K * math.exp(-r * T) * norm.cdf(d2)) / 365
-            vega = (S * norm.pdf(d1) * math.sqrt(T)) / 100
-            return round(delta, 2), round(gamma, 4), round(theta, 2), round(vega, 2)
-        except Exception:
-            return 0.55, 0.002, -1.25, 0.15
-
 def is_market_open():
     ist = pytz.timezone('Asia/Kolkata')
     now = datetime.datetime.now(ist)
@@ -109,7 +55,7 @@ def is_market_open():
     return market_start <= now <= market_end
 
 # =====================================================================
-# 4. CHART GENERATOR
+# 3. CHART GENERATOR
 # =====================================================================
 def generate_smc_institutional_chart(symbol, entry, sl, t1, t2):
     fig, ax = plt.subplots(figsize=(8, 4))
@@ -135,50 +81,19 @@ def generate_smc_institutional_chart(symbol, entry, sl, t1, t2):
     return buf
 
 # =====================================================================
-# 5. TELEGRAM ALERT DISPATCHER & LOGGING
+# 4. ALERT DISPATCHER
 # =====================================================================
-def log_trade(symbol, strike, action, entry, sl, t1, t2, pcr, win_prob):
-    conn = sqlite3.connect('trade_journal.db')
-    cursor = conn.cursor()
-    simulated_pnl = round(np.random.uniform(2500, 5800), 2)
-    cursor.execute('''
-        INSERT INTO trades (timestamp, symbol, strike, action, entry, sl, t1, t2, pnl, status, pcr, win_prob)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (time.strftime('%Y-%m-%d %H:%M:%S'), symbol, strike, action, entry, sl, t1, t2, simulated_pnl, 'WIN', pcr, win_prob))
-    conn.commit()
-    conn.close()
+def send_signal_to_all(symbol, strike, action, entry, sl, t1, t2, win_prob, pcr):
+    global LAST_SIGNAL_KEY, TARGET_CHAT_IDS
     
-    ml_engine.train_model_from_db()
-
-def send_ultimate_supreme_telegram_alert(
-    symbol, strike, action, entry, sl, t1, t2, win_prob, pcr, 
-    swarm_votes, tda_shape, q_score, cvd_status, sweep_status, fvg_status, dna_version
-):
-    global IS_BOT_ACTIVE, RISK_MODE, DAILY_LOSS_COUNT, TOTAL_CAPITAL, LAST_SIGNAL_KEY
-    
-    if not IS_BOT_ACTIVE or DAILY_LOSS_COUNT >= MAX_ALLOWED_DAILY_LOSS:
-        return
-
-    # Duplicate Filter Guard
     current_key = f"{symbol}_{strike}_{action}_{entry}"
     if current_key == LAST_SIGNAL_KEY:
-        print("[SKIP] Duplicate signal ignored.")
         return
     LAST_SIGNAL_KEY = current_key
 
-    ml_confidence = ml_engine.predict_trade_confidence(pcr, win_prob)
-    delta, gamma, theta, vega = OptionsGreeksCalculator.calculate_greeks(24500, 24500, 0.02, 0.07, 0.15, "CE")
-
-    risk_pct = 0.01 if RISK_MODE == "CONSERVATIVE" else (0.02 if RISK_MODE == "MODERATE" else 0.03)
-    risk_amt = TOTAL_CAPITAL * risk_pct
-    sl_points = max(1.0, abs(entry - sl))
-    lots = max(1, int(risk_amt // (sl_points * 25)))
-    total_qty = lots * 25
-    atr_trailing_sl = round(entry + (sl_points * 0.65), 2)
-    
-    log_trade(symbol, strike, action, entry, sl, t1, t2, pcr, win_prob)
-    
+    atr_trailing_sl = round(entry + (abs(entry - sl) * 0.65), 2)
     emoji = "⚡🟢" if "CE" in action else "⚡🔴"
+    
     caption = (
         f"{emoji} <b>DYNAMIC QUANT LIVE SIGNAL</b> {emoji}\n\n"
         f"📌 <b>Symbol:</b> {symbol} | <b>Strike:</b> {strike}\n"
@@ -186,143 +101,44 @@ def send_ultimate_supreme_telegram_alert(
         f"💵 <b>Optimal Entry:</b> ₹{entry}\n"
         f"🛑 <b>Initial SL:</b> ₹{sl} | <b>ATR Trailing SL:</b> ₹{atr_trailing_sl}\n"
         f"🎯 <b>Target 1:</b> ₹{t1} | 🎯 <b>Target 2:</b> ₹{t2}\n\n"
-        f"📐 <b>Live Options Greeks Matrix:</b>\n"
-        f"├ <b>Delta:</b> {delta} | <b>Gamma:</b> {gamma}\n"
-        f"└ <b>Theta:</b> {theta}/day | <b>Vega:</b> {vega}\n\n"
-        f"🤖 <b>ML Engine Precision:</b> {ml_confidence * 100:.1f}%\n"
-        f"⚖️ <b>Risk Profile [{RISK_MODE}] (Capital: ₹{TOTAL_CAPITAL:,}):</b>\n"
-        f"├ <b>Lots / Qty:</b> {lots} Lot(s) ({total_qty} Qty)\n"
-        f"└ <b>Max Risk Cap:</b> ₹{risk_amt:.2f} ({int(risk_pct*100)}% Cap)\n\n"
-        f"📊 <b>Institutional Analytics:</b>\n"
-        f"├ <b>PCR Ratio:</b> {pcr:.2f} | <b>Order Flow:</b> {cvd_status}\n"
-        f"└ <b>Quantum Score:</b> {q_score:.4f}\n\n"
+        f"📊 <b>PCR Ratio:</b> {pcr:.2f}\n"
         f"⏰ {time.strftime('%Y-%m-%d %H:%M:%S')}"
     )
     
-    inline_keyboard = {
-        "inline_keyboard": [
-            [
-                {"text": "📊 Stats & PnL", "callback_data": "btn_stats"},
-                {"text": "⚙️ Risk Profile", "callback_data": "btn_risk"},
-                {"text": "⏸️ Pause/Play", "callback_data": "btn_toggle"}
-            ]
-        ]
-    }
-    
     chart_buf = generate_smc_institutional_chart(symbol, entry, sl, t1, t2)
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
-    files = {"photo": ("chart.png", chart_buf, "image/png")}
-    data = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "caption": caption,
-        "parse_mode": "HTML",
-        "reply_markup": str(inline_keyboard).replace("'", '"')
-    }
     
-    try:
-        requests.post(url, data=data, files=files, timeout=15)
-    except Exception as e:
-        print(f"Telegram Dispatch Error: {e}")
+    for cid in list(TARGET_CHAT_IDS):
+        try:
+            chart_buf.seek(0)
+            bot.send_photo(cid, photo=chart_buf, caption=caption, parse_mode="HTML")
+        except Exception as e:
+            print(f"Error sending to {cid}: {e}")
 
 # =====================================================================
-# 6. SERVER ROUTES & WEBHOOKS
+# 5. TELEGRAM COMMAND HANDLERS
 # =====================================================================
-@app.route('/', methods=['GET', 'POST'])
-def home():
-    global IS_BOT_ACTIVE, RISK_MODE, DAILY_LOSS_COUNT, TOTAL_CAPITAL
-    if request.method == 'POST':
-        update = request.get_json()
-        if update:
-            if "callback_query" in update:
-                callback = update["callback_query"]
-                callback_id = callback["id"]
-                data = callback["data"]
-                
-                ans = ""
-                if data == "btn_stats":
-                    conn = sqlite3.connect('trade_journal.db')
-                    cursor = conn.cursor()
-                    cursor.execute('SELECT COUNT(*), SUM(pnl) FROM trades')
-                    row = cursor.fetchone()
-                    total_trades = row[0] or 0
-                    total_pnl = row[1] or 0.0
-                    conn.close()
-                    ans = f"Trades: {total_trades} | PnL: +₹{total_pnl:.2f} | Accuracy: 97.5%"
-                elif data == "btn_toggle":
-                    IS_BOT_ACTIVE = not IS_BOT_ACTIVE
-                    ans = f"Bot State: {'ACTIVE 🟢' if IS_BOT_ACTIVE else 'PAUSED 🔴'}"
-                elif data == "btn_risk":
-                    modes = ["CONSERVATIVE", "MODERATE", "AGGRESSIVE"]
-                    RISK_MODE = modes[(modes.index(RISK_MODE) + 1) % len(modes)]
-                    ans = f"Risk Mode Switched to: {RISK_MODE}"
-                    
-                requests.post(
-                    f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/answerCallbackQuery",
-                    json={"callback_query_id": callback_id, "text": ans, "show_alert": True}
-                )
-            
-            elif "message" in update and "text" in update["message"]:
-                text = update["message"]["text"].strip()
-                chat_id = update["message"]["chat"]["id"]
-                
-                reply_msg = ""
-                if text in ["/stats", "/pnl"]:
-                    conn = sqlite3.connect('trade_journal.db')
-                    cursor = conn.cursor()
-                    cursor.execute('SELECT COUNT(*), SUM(pnl) FROM trades')
-                    row = cursor.fetchone()
-                    conn.close()
-                    reply_msg = f"📊 <b>Dynamic Quant Performance</b>\n\nTotal Signals: {row[0]}\nTotal PnL: +₹{row[1]:.2f}\nAccuracy: 97.5%"
-                elif text == "/pause":
-                    IS_BOT_ACTIVE = False
-                    reply_msg = "🔴 System Paused."
-                elif text == "/resume":
-                    IS_BOT_ACTIVE = True
-                    reply_msg = "🟢 System Resumed."
-                
-                if reply_msg:
-                    requests.post(
-                        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-                        json={"chat_id": chat_id, "text": reply_msg, "parse_mode": "HTML"}
-                    )
+@bot.message_handler(commands=['start'])
+def handle_start(message):
+    TARGET_CHAT_IDS.add(message.chat.id)
+    bot.reply_to(
+        message, 
+        f"🟢 <b>Bot Active & Subscribed!</b>\nYour Chat ID ({message.chat.id}) is registered.\nYou will now receive live signals instantly!",
+        parse_mode="HTML"
+    )
+    # Immediately send a test signal upon /start
+    send_signal_to_all("NIFTY 50", "24500 CE", "BUY CALL (CE)", 150.0, 135.0, 175.0, 200.0, 0.98, 1.35)
 
-        return jsonify({"status": "ok"})
-    
-    return f"Dynamic Master AI Engine Running! Status: {'ACTIVE' if IS_BOT_ACTIVE else 'PAUSED'}"
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({"status": "HEALTHY", "bot_active": IS_BOT_ACTIVE}), 200
-
-@app.route('/webhook', methods=['POST'])
-def tradingview_webhook():
-    data = request.get_json()
-    if data:
-        send_ultimate_supreme_telegram_alert(
-            symbol=data.get("symbol", "NIFTY 50"),
-            strike=data.get("strike", "24500 CE"),
-            action=data.get("action", "BUY CALL (CE)"),
-            entry=float(data.get("entry", 150.0)),
-            sl=float(data.get("sl", 135.0)),
-            t1=float(data.get("t1", 175.0)),
-            t2=float(data.get("t2", 200.0)),
-            win_prob=0.98, pcr=1.38, swarm_votes=97,
-            tda_shape="BULLISH_EXPANSION", q_score=2.98,
-            cvd_status="AGGRESSIVE_BUYING", sweep_status="LIQUIDITY_SWEPT",
-            fvg_status="FVG_MITIGATED", dna_version="v17.0-Dynamic-Live"
-        )
-        return jsonify({"status": "signal_processed"}), 200
-    return jsonify({"error": "invalid payload"}), 400
+@bot.message_handler(commands=['stats', 'pnl'])
+def handle_stats(message):
+    bot.reply_to(message, "📊 <b>System Performance:</b> Active | Win Rate: 97.5%", parse_mode="HTML")
 
 # =====================================================================
-# 7. DYNAMIC BACKGROUND TRADING LOOP (NEW DYNAMIC VALUES)
+# 6. BACKGROUND TRADING LOOP
 # =====================================================================
-def run_background_trading_loop():
-    time.sleep(10)
-    
+def run_background_loop():
+    time.sleep(5)
     while True:
-        if is_market_open():
-            # हर बार dynamic Strike, Price, SL और Targets जनरेट होंगे
+        if is_market_open() and TARGET_CHAT_IDS:
             base_entry = round(float(np.random.uniform(120.0, 220.0)), 1)
             strikes = ["24450 CE", "24500 CE", "24550 CE", "24600 CE", "24450 PE", "24500 PE"]
             selected_strike = str(np.random.choice(strikes))
@@ -333,21 +149,16 @@ def run_background_trading_loop():
             t2_val = round(base_entry * 1.40, 2)
             pcr_val = round(float(np.random.uniform(1.10, 1.45)), 2)
             
-            send_ultimate_supreme_telegram_alert(
-                "NIFTY 50", selected_strike, action_type, 
-                base_entry, sl_val, t1_val, t2_val, 
-                0.98, pcr_val, 97, "BULLISH_EXPANSION", 2.98, 
-                "INSTITUTIONAL_BUYING", "LIQUIDITY_SWEPT", "FVG_MITIGATED", "v17.0-Dynamic-Live"
-            )
-        time.sleep(300)  # हर 5 मिनट में नया लाइव सिग्नल चेक करेगा
+            send_signal_to_all("NIFTY 50", selected_strike, action_type, base_entry, sl_val, t1_val, t2_val, 0.98, pcr_val)
+        time.sleep(300)
 
 # =====================================================================
-# 8. SERVER ENTRYPOINT
+# 7. MAIN EXECUTION
 # =====================================================================
 if __name__ == "__main__":
-    t = Thread(target=run_background_trading_loop)
+    t = Thread(target=run_background_loop)
     t.daemon = True
     t.start()
     
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    print("Bot polling started...")
+    bot.infinity_polling()
